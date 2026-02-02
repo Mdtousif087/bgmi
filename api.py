@@ -33,7 +33,6 @@ def get_authorization_token():
         "_ga_H8PYYR9D1R": "GS1.1.1731057931.1.1.1731058076.0.0.0"
     }
 
-
     response = requests.get(url, headers=headers, cookies=cookies)
     
     user_auth = response.cookies.get('user_auth')
@@ -72,15 +71,75 @@ def get_username():
     data = response.json()
 
     if data.get('transaction') == 'SUCCESS':
-       return jsonify({
-        "success": True,
-        "username": data['unipinRes']['username'],
-        "uid": user_id,
-        "server": "bgmi",
-        "region": "ind"
-    })
+        # Extract all important parameters
+        unipin_res = data.get('unipinRes', {})
+        return jsonify({
+            "success": True,
+            "username": unipin_res.get('username'),
+            "uid": user_id,
+            "server": "bgmi",
+            "region": "ind",
+            # Additional parameters from response
+            "transaction": data.get('transaction'),
+            "message": data.get('message'),
+            "gameCode": data.get('gameCode'),
+            "id": data.get('id'),
+            # Unipin specific details
+            "unipin_user_id": unipin_res.get('user_id'),
+            "unipin_platform": unipin_res.get('platform'),
+            "unipin_email": unipin_res.get('email'),
+            "unipin_verified": unipin_res.get('verified'),
+            "unipin_created_at": unipin_res.get('created_at'),
+            "unipin_updated_at": unipin_res.get('updated_at'),
+            # Response metadata
+            "response_status": response.status_code,
+            "response_time": response.elapsed.total_seconds()
+        })
     else:
-        return jsonify({"success": False, "error": data.get('message', 'Unknown error')})
+        return jsonify({
+            "success": False,
+            "error": data.get('message', 'Unknown error'),
+            "transaction": data.get('transaction'),
+            "gameCode": data.get('gameCode'),
+            "id": data.get('id')
+        })
+
+# Additional endpoint for more parameters if needed
+@app.route('/details', methods=['GET'])
+def get_detailed_info():
+    user_id = request.args.get('user')
+    if not user_id:
+        return jsonify({"success": False, "error": "Missing user ID"}), 400
+
+    access_token = get_authorization_token()
+    if not access_token:
+        return jsonify({"success": False, "error": "Failed to get access token"}), 500
+
+    url = f"https://bazaar.rooter.io/order/getUnipinUsername?gameCode=BGMI_IN&id={user_id}"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Device-Type": "web",
+        "App-Version": "1.0.0",
+        "Device-Id": "beff6160-9daf-11ef-966f-a9ffd59b9537",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.70 Safari/537.36",
+        "Accept": "application/json"
+    }
+
+    response = requests.get(url, headers=headers)
+    data = response.json()
+    
+    # Return complete response with all parameters
+    return jsonify({
+        "success": data.get('transaction') == 'SUCCESS',
+        "complete_response": data,
+        "request_parameters": {
+            "user_id": user_id,
+            "game_code": "BGMI_IN",
+            "endpoint": "getUnipinUsername"
+        },
+        "response_headers": dict(response.headers),
+        "status_code": response.status_code
+    })
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
